@@ -1,11 +1,10 @@
 from django.urls import path, include
 from rest_framework import routers
-from peraturan import views
+from .views import PeraturanViewSet, PeraturanVersionViewSet
 
 router = routers.DefaultRouter()
-
-# Di sini kita akan mendaftarkan viewset nanti, misalnya:
-# router.register(r'peraturan', views.PeraturanViewSet)
+router.register(r'peraturan', PeraturanViewSet)
+router.register(r'versions', PeraturanVersionViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
