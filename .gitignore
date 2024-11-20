@@ -1,0 +1,21 @@
+# Lingkungan virtual
+env/
+
+# File Python yang dikompilasi
+*.pyc
+__pycache__/
+
+# Database lokal
+db.sqlite3
+
+# File statis dan media (opsional)
+staticfiles/
+media/
+
+# Konfigurasi IDE (opsional)
+.vscode/
+.idea/
+
+# File lingkungan
+*.env
+venv
