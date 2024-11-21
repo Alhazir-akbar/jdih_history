@@ -1,6 +1,6 @@
 .
 ├── ./Makefile
-├── ./folder_structure.txt
+├── ./generate_project_structure.py
 ├── ./jdih_history
 │   ├── ./jdih_history/__init__.py
 │   ├── ./jdih_history/asgi.py
@@ -10,10 +10,12 @@
 │   │   └── ./jdih_history/utils/generate_secret_key.py
 │   └── ./jdih_history/wsgi.py
 ├── ./manage.py
+├── ./output.txt
 ├── ./peraturan
 │   ├── ./peraturan/__init__.py
 │   ├── ./peraturan/admin.py
 │   ├── ./peraturan/apps.py
+│   ├── ./peraturan/authentication.py
 │   ├── ./peraturan/migrations
 │   │   ├── ./peraturan/migrations/0001_initial.py
 │   │   ├── ./peraturan/migrations/0002_alter_peraturan_peraturan_terkait.py
@@ -26,14 +28,7 @@
 │   │   ├── ./peraturan/utils/__init__.py
 │   │   └── ./peraturan/utils/utils.py
 │   └── ./peraturan/views.py
-├── ./peraturan_pdfs
-│   ├── ./peraturan_pdfs/Keputusan_Gubernur_Daerah_Istimewa_Yogyakarta.pdf
-│   └── ./peraturan_pdfs/Peraturan_Gubernur.pdf
 ├── ./requirements.txt
-├── ./struktur_project.txt
-└── ./templates
-    ├── ./templates/peraturan_detail.html
-    ├── ./templates/peraturan_list.html
-    └── ./templates/peraturan_version_detail.html
+└── ./struktur_project.txt
 
-8 directories, 29 files
+6 directories, 26 files

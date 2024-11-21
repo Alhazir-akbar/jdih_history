@@ -27,7 +27,8 @@ class PeraturanViewSet(viewsets.ModelViewSet):
             else:
                 version_number = 1
             serializer.save(peraturan=peraturan, version_number=version_number, updated_by=request.user)
-            # TODO: Add logic for PDF extraction and field change detection
+            
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -38,14 +39,6 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def save(self, *args, **kwargs):
-        # Ekstraksi PDF
-        if self.pdf_file:
-            self.pdf_file.seek(0)
-            extracted_text = extract_pdf_content(self.pdf_file)
-            print('extracted_text: ', extracted_text)
-            self.extracted_content = {'text': extracted_text}
-        super().save(*args, **kwargs)
-
         # Pelacakan perubahan
         previous_version = PeraturanVersion.objects.filter(
             peraturan=self.peraturan,
@@ -60,6 +53,7 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
                 new_value = getattr(self.peraturan, field)
                 if old_value != new_value:
                     changed_fields[field] = {'old': old_value, 'new': new_value}
+
             # Bandingkan isi PDF
             if previous_version.extracted_content != self.extracted_content:
                 changed_fields['extracted_content'] = 'Content changed.'
