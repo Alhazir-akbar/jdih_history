@@ -4,7 +4,7 @@ from .models import Peraturan, PeraturanVersion
 class PeraturanVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PeraturanVersion
-        fields = '__all__'
+        fields = ['version_number', 'is_final', 'pdf_file']
 
 
 class PeraturanSerializer(serializers.ModelSerializer):

@@ -1,19 +1,20 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 
+from peraturan.authentication import SessionJWTAuthentication
 from peraturan.utils.utils import extract_pdf_content
 from .models import Peraturan, PeraturanVersion
 from .serializers import PeraturanSerializer, PeraturanVersionSerializer
-from django.shortcuts import get_object_or_404
 from rest_framework.decorators import action
-from django.contrib.auth.models import User
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import TemplateHTMLRenderer
+from django.shortcuts import redirect
 
 class PeraturanViewSet(viewsets.ModelViewSet):
     queryset = Peraturan.objects.all()
     serializer_class = PeraturanSerializer
     permission_classes = [IsAuthenticated]
-
+    
     @action(detail=True, methods=['post'])
     def add_version(self, request, pk=None):
         peraturan = self.get_object()
@@ -41,6 +42,7 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
         if self.pdf_file:
             self.pdf_file.seek(0)
             extracted_text = extract_pdf_content(self.pdf_file)
+            print('extracted_text: ', extracted_text)
             self.extracted_content = {'text': extracted_text}
         super().save(*args, **kwargs)
 
@@ -63,5 +65,3 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
                 changed_fields['extracted_content'] = 'Content changed.'
             self.changed_fields = changed_fields
         self.save(update_fields=['changed_fields'])
-
-
