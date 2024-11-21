@@ -1,61 +1,102 @@
+# peraturan/views.py
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
-
-from peraturan.authentication import SessionJWTAuthentication
-from peraturan.utils.utils import extract_pdf_content
-from .models import Peraturan, PeraturanVersion
-from .serializers import PeraturanSerializer, PeraturanVersionSerializer
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.renderers import TemplateHTMLRenderer
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404
+from django.db import transaction
+
+from .authentication import SessionJWTAuthentication
+from .utils.utils import extract_pdf_content
+from .models import Peraturan, PeraturanVersion
+from .serializers import PeraturanSerializer, PeraturanVersionSerializer
 
 class PeraturanViewSet(viewsets.ModelViewSet):
     queryset = Peraturan.objects.all()
     serializer_class = PeraturanSerializer
     permission_classes = [IsAuthenticated]
     
+    def create(self, request, *args, **kwargs):
+        """
+        Override the create method to automatically create the first version
+        when a new Peraturan is created.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            peraturan = serializer.save()
+            pdf_file = request.FILES.get('pdf_file')
+            if pdf_file:
+                # Membuat versi pertama
+                PeraturanVersion.objects.create(
+                    peraturan=peraturan,
+                    version_number=1,
+                    pdf_file=pdf_file,
+                    extracted_content=extract_pdf_content(pdf_file),
+                    updated_by=request.user
+                )
+            else:
+                return Response({"detail": "Lampiran PDF diperlukan saat membuat peraturan baru."}, status=status.HTTP_400_BAD_REQUEST)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
     @action(detail=True, methods=['post'])
     def add_version(self, request, pk=None):
+        """
+        Custom action to add a new version to an existing Peraturan.
+        """
         peraturan = self.get_object()
         serializer = PeraturanVersionSerializer(data=request.data)
-        if serializer.is_valid():
-            # Set version number
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
             last_version = peraturan.versions.last()
-            if last_version:
-                version_number = last_version.version_number + 1
-            else:
-                version_number = 1
-            serializer.save(peraturan=peraturan, version_number=version_number, updated_by=request.user)
-            
-
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            version_number = last_version.version_number + 1 if last_version else 1
+            pdf_file = request.FILES.get('pdf_file')
+            if not pdf_file:
+                raise exceptions.ValidationError({"detail": "Lampiran PDF diperlukan untuk menambahkan versi baru."})
+            peraturan_version = PeraturanVersion.objects.create(
+                peraturan=peraturan,
+                version_number=version_number,
+                pdf_file=pdf_file,
+                extracted_content=extract_pdf_content(pdf_file),
+                updated_by=request.user
+            )
+            # Logika perbandingan dan pencatatan perubahan bisa ditambahkan di sini
+        return Response(PeraturanVersionSerializer(peraturan_version).data, status=status.HTTP_201_CREATED)
 
 class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PeraturanVersion.objects.all()
     serializer_class = PeraturanVersionSerializer
     permission_classes = [IsAuthenticated]
 
-    def save(self, *args, **kwargs):
-        # Pelacakan perubahan
-        previous_version = PeraturanVersion.objects.filter(
-            peraturan=self.peraturan,
-            version_number=self.version_number - 1
-        ).first()
-        if previous_version:
-            changed_fields = {}
-            # Bandingkan field Peraturan
-            peraturan_fields = [f.name for f in Peraturan._meta.fields if f.name not in ('id', 'created_at', 'updated_at')]
-            for field in peraturan_fields:
-                old_value = getattr(previous_version.peraturan, field)
-                new_value = getattr(self.peraturan, field)
-                if old_value != new_value:
-                    changed_fields[field] = {'old': old_value, 'new': new_value}
+    @action(detail=False, methods=['get'])
+    def compare(self, request):
+        """
+        Custom endpoint to compare two versions.
+        Expected query parameters: version1 and version2
+        """
+        version1_id = request.query_params.get('version1')
+        version2_id = request.query_params.get('version2')
 
-            # Bandingkan isi PDF
-            if previous_version.extracted_content != self.extracted_content:
-                changed_fields['extracted_content'] = 'Content changed.'
-            self.changed_fields = changed_fields
-        self.save(update_fields=['changed_fields'])
+        if not version1_id or not version2_id:
+            return Response({"detail": "Parameter 'version1' dan 'version2' diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        version1 = get_object_or_404(PeraturanVersion, id=version1_id)
+        version2 = get_object_or_404(PeraturanVersion, id=version2_id)
+
+        # Pastikan kedua versi terkait dengan peraturan yang sama
+        if version1.peraturan != version2.peraturan:
+            return Response({"detail": "Kedua versi harus terkait dengan peraturan yang sama."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Menggabungkan perubahan dari kedua versi
+        comparison = {}
+        for field, changes in version2.changed_fields.items():
+            comparison[field] = changes
+
+        return Response({
+            "peraturan": version1.peraturan.judul_peraturan,
+            "version1": PeraturanVersionSerializer(version1).data,
+            "version2": PeraturanVersionSerializer(version2).data,
+            "comparison": comparison
+        }, status=status.HTTP_200_OK)

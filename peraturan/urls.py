@@ -8,7 +8,6 @@ router = routers.DefaultRouter()
 router.register(r'peraturan', PeraturanViewSet, basename='peraturan')
 router.register(r'versions', PeraturanVersionViewSet, basename='peraturanversion')
 
-
 urlpatterns = [
     path('', include(router.urls)),
 ]

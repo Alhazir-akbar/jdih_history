@@ -1,10 +1,11 @@
+# peraturan/models.py
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import JSONField
-
-from peraturan.utils.utils import extract_pdf_content
+from .utils.utils import extract_pdf_content
 
 class Peraturan(models.Model):
     # Informasi Umum
@@ -63,7 +64,29 @@ class PeraturanVersion(models.Model):
             self.pdf_file.seek(0)
             extracted_text = extract_pdf_content(self.pdf_file)
             self.extracted_content = {'text': extracted_text}
+        
+        # Memanggil save terlebih dahulu untuk mendapatkan versi yang benar
         super().save(*args, **kwargs)
 
-
-
+        # Pelacakan perubahan setelah save untuk mendapatkan data yang tersimpan
+        if self.version_number > 1:
+            previous_version = PeraturanVersion.objects.filter(peraturan=self.peraturan, version_number=self.version_number - 1).first()
+            if previous_version:
+                changed_fields = {}
+                # Bandingkan field data Peraturan
+                peraturan_fields = [field.name for field in Peraturan._meta.fields if field.name not in ('id', 'created_at', 'updated_at')]
+                for field in peraturan_fields:
+                    old_value = getattr(previous_version.peraturan, field)
+                    new_value = getattr(self.peraturan, field)
+                    if old_value != new_value:
+                        changed_fields[field] = {'old': old_value, 'new': new_value}
+                
+                # Bandingkan isi PDF
+                old_text = previous_version.extracted_content.get('text', '')
+                new_text = self.extracted_content.get('text', '')
+                if old_text != new_text:
+                    changed_fields['extracted_content'] = 'Content changed.'
+                
+                self.changed_fields = changed_fields
+                # Memperbarui instance dengan perubahan yang dicatat
+                super().save(update_fields=['changed_fields'])
