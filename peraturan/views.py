@@ -6,6 +6,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import F, Value
+from django.db.models.functions import Concat
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework import viewsets
+
 
 from .authentication import SessionJWTAuthentication
 from .utils.utils import extract_pdf_content
@@ -120,6 +127,12 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PeraturanVersionSerializer
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['get'])
+    def list_versions(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset().annotate(peraturan_name=Concat(F('peraturan__jenis_peraturan'),Value(' '),))
+        ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
+        return Response(list(queryset), status=status.HTTP_200_OK)
+    
     @action(detail=False, methods=['get'])
     def compare(self, request):
         """
