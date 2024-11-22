@@ -13,6 +13,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import viewsets
 
+from peraturan.pagination import PeraturanVersionPagination
+
 
 from .authentication import SessionJWTAuthentication
 from .utils.utils import extract_pdf_content
@@ -44,7 +46,7 @@ class PeraturanViewSet(viewsets.ModelViewSet):
                     updated_by=request.user
                 )
             else:
-                return Response({"detail": "Lampiran PDF diperlukan saat membuat peraturan baru."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": "Lampiran PDF 'pdf_file' diperlukan saat membuat peraturan baru."}, status=status.HTTP_400_BAD_REQUEST)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
@@ -126,21 +128,37 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PeraturanVersion.objects.all()
     serializer_class = PeraturanVersionSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = PeraturanVersionPagination
+
+    def get_annotated_queryset(self, peraturan_id=None):
+        queryset = PeraturanVersion.objects.all()
+
+        if peraturan_id:
+            queryset = queryset.filter(peraturan_id=peraturan_id)
+        
+        return queryset.annotate(
+            peraturan_name = Concat(
+                F('peraturan__judul_peraturan'),
+                Value(''),
+                output_field=CharField()
+            )
+        ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
 
     @action(detail=False, methods=['get'])
     def list_versions_id(self, request):
         peraturan_id = request.query_params.get('id_peraturan')
         if not peraturan_id:
             return Response({"detail": "Parameter 'id_peraturan' diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
-        query = PeraturanVersion.objects.filter(peraturan_id=peraturan_id).annotate(peraturan_name=Concat(F('peraturan__judul_peraturan'),Value(' '),output_field=CharField())
-        ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
         
+        if not peraturan_id.isdigit():
+            return Response({"detail":"id_peraturan harus berupa angka."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        query = self.get_annotated_queryset(peraturan_id=int(peraturan_id))
         return Response(list(query), status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def list_versions(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset().annotate(peraturan_name=Concat(F('peraturan__judul_peraturan'),Value(' '),output_field=CharField()))
-        ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
+        queryset = self.get_annotated_queryset()
         return Response(list(queryset), status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['get'])
