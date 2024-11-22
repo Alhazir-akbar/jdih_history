@@ -128,6 +128,16 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
+    def list_versions_id(self, request):
+        peraturan_id = request.query_params.get('id_peraturan')
+        if not peraturan_id:
+            return Response({"detail": "Parameter 'id_peraturan' diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+        query = PeraturanVersion.objects.filter(peraturan_id=peraturan_id).annotate(peraturan_name=Concat(F('peraturan__jenis_peraturan'),Value(' '),)
+        ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
+        
+        return Response(list(query), status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
     def list_versions(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset().annotate(peraturan_name=Concat(F('peraturan__jenis_peraturan'),Value(' '),))
         ).values('id', 'version_number', 'peraturan_name', 'peraturan', 'is_final')
