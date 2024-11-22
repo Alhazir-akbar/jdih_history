@@ -1,0 +1,423 @@
+Struktur folder dan code saat ini 
+
+ Berikut adalah perkembangan code dan struktur folder saat ini :  
+
+[/home/enigmap/aptika/jdih_history/struktur_project.txt]:
+""" Start isi code [struktur_project.txt] """
+
+	.
+	├── ./Makefile
+	├── ./generate_project_structure.py
+	├── ./jdih_history
+	│   ├── ./jdih_history/__init__.py
+	│   ├── ./jdih_history/asgi.py
+	│   ├── ./jdih_history/settings.py
+	│   ├── ./jdih_history/urls.py
+	│   ├── ./jdih_history/utils
+	│   │   └── ./jdih_history/utils/generate_secret_key.py
+	│   └── ./jdih_history/wsgi.py
+	├── ./manage.py
+	├── ./output.txt
+	├── ./peraturan
+	│   ├── ./peraturan/__init__.py
+	│   ├── ./peraturan/admin.py
+	│   ├── ./peraturan/apps.py
+	│   ├── ./peraturan/authentication.py
+	│   ├── ./peraturan/migrations
+	│   │   ├── ./peraturan/migrations/0001_initial.py
+	│   │   ├── ./peraturan/migrations/0002_alter_peraturan_peraturan_terkait.py
+	│   │   └── ./peraturan/migrations/__init__.py
+	│   ├── ./peraturan/models.py
+	│   ├── ./peraturan/serializers.py
+	│   ├── ./peraturan/tests.py
+	│   ├── ./peraturan/urls.py
+	│   ├── ./peraturan/utils
+	│   │   ├── ./peraturan/utils/__init__.py
+	│   │   └── ./peraturan/utils/utils.py
+	│   └── ./peraturan/views.py
+	├── ./requirements.txt
+	└── ./struktur_project.txt
+	
+	6 directories, 26 files
+
+""" End code [struktur_project.txt] """
+
+[/home/enigmap/aptika/jdih_history/jdih_history/urls.py]:
+""" Start isi code [urls.py] """
+
+	# jdih_history/urls.py
+	
+	from django.contrib import admin
+	from django.urls import path, include
+	from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+	from django.conf import settings
+	from django.conf.urls.static import static
+	
+	urlpatterns = [
+	    path('admin/', admin.site.urls),
+	    path('api/', include('peraturan.urls')), 
+	    path('api/login/', TokenObtainPairView.as_view(), name='login'),
+	    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+	]
+	
+	if settings.DEBUG:
+	    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+""" End code [urls.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/views.py]:
+""" Start isi code [views.py] """
+
+	# peraturan/views.py
+	
+	from rest_framework import viewsets, status
+	from rest_framework.response import Response
+	from rest_framework.decorators import action
+	from rest_framework.permissions import IsAuthenticated
+	from django.shortcuts import get_object_or_404
+	from django.db import transaction
+	
+	from .authentication import SessionJWTAuthentication
+	from .utils.utils import extract_pdf_content
+	from .models import Peraturan, PeraturanVersion
+	from .serializers import PeraturanSerializer, PeraturanVersionSerializer
+	
+	class PeraturanViewSet(viewsets.ModelViewSet):
+	    queryset = Peraturan.objects.all()
+	    serializer_class = PeraturanSerializer
+	    permission_classes = [IsAuthenticated]
+	    
+	    def create(self, request, *args, **kwargs):
+	        """
+	        Override the create method to automatically create the first version
+	        when a new Peraturan is created.
+	        """
+	        serializer = self.get_serializer(data=request.data)
+	        serializer.is_valid(raise_exception=True)
+	        with transaction.atomic():
+	            peraturan = serializer.save()
+	            pdf_file = request.FILES.get('pdf_file')
+	            if pdf_file:
+	                # Membuat versi pertama
+	                PeraturanVersion.objects.create(
+	                    peraturan=peraturan,
+	                    version_number=1,
+	                    pdf_file=pdf_file,
+	                    extracted_content=extract_pdf_content(pdf_file),
+	                    updated_by=request.user
+	                )
+	            else:
+	                return Response({"detail": "Lampiran PDF diperlukan saat membuat peraturan baru."}, status=status.HTTP_400_BAD_REQUEST)
+	        headers = self.get_success_headers(serializer.data)
+	        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+	    
+	    @action(detail=True, methods=['post'])
+	    def add_version(self, request, pk=None):
+	        """
+	        Custom action to add a new version to an existing Peraturan.
+	        """
+	        peraturan = self.get_object()
+	        serializer = PeraturanVersionSerializer(data=request.data)
+	        serializer.is_valid(raise_exception=True)
+	        with transaction.atomic():
+	            last_version = peraturan.versions.last()
+	            version_number = last_version.version_number + 1 if last_version else 1
+	            pdf_file = request.FILES.get('pdf_file')
+	            if not pdf_file:
+	                raise exceptions.ValidationError({"detail": "Lampiran PDF diperlukan untuk menambahkan versi baru."})
+	            peraturan_version = PeraturanVersion.objects.create(
+	                peraturan=peraturan,
+	                version_number=version_number,
+	                pdf_file=pdf_file,
+	                extracted_content=extract_pdf_content(pdf_file),
+	                updated_by=request.user
+	            )
+	            # Logika perbandingan dan pencatatan perubahan bisa ditambahkan di sini
+	        return Response(PeraturanVersionSerializer(peraturan_version).data, status=status.HTTP_201_CREATED)
+	
+	class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
+	    queryset = PeraturanVersion.objects.all()
+	    serializer_class = PeraturanVersionSerializer
+	    permission_classes = [IsAuthenticated]
+	
+	    @action(detail=False, methods=['get'])
+	    def compare(self, request):
+	        """
+	        Custom endpoint to compare two versions.
+	        Expected query parameters: version1 and version2
+	        """
+	        version1_id = request.query_params.get('version1')
+	        version2_id = request.query_params.get('version2')
+	
+	        if not version1_id or not version2_id:
+	            return Response({"detail": "Parameter 'version1' dan 'version2' diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+	        
+	        version1 = get_object_or_404(PeraturanVersion, id=version1_id)
+	        version2 = get_object_or_404(PeraturanVersion, id=version2_id)
+	
+	        # Pastikan kedua versi terkait dengan peraturan yang sama
+	        if version1.peraturan != version2.peraturan:
+	            return Response({"detail": "Kedua versi harus terkait dengan peraturan yang sama."}, status=status.HTTP_400_BAD_REQUEST)
+	        
+	        # Menggabungkan perubahan dari kedua versi
+	        comparison = {}
+	        for field, changes in version2.changed_fields.items():
+	            comparison[field] = changes
+	
+	        return Response({
+	            "peraturan": version1.peraturan.judul_peraturan,
+	            "version1": PeraturanVersionSerializer(version1).data,
+	            "version2": PeraturanVersionSerializer(version2).data,
+	            "comparison": comparison
+	        }, status=status.HTTP_200_OK)
+""" End code [views.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/models.py]:
+""" Start isi code [models.py] """
+
+	# peraturan/models.py
+	
+	from django.db import models
+	from django.contrib.auth.models import User
+	from django.utils import timezone
+	from django.contrib.postgres.fields import ArrayField
+	from django.db.models import JSONField
+	from .utils.utils import extract_pdf_content
+	
+	class Peraturan(models.Model):
+	    # Informasi Umum
+	    jenis_peraturan = models.CharField(max_length=255)
+	    judul_peraturan = models.TextField()
+	    tahun_terbit = models.PositiveIntegerField()
+	    nomor = models.CharField(max_length=50)
+	    singkatan_jenis = models.CharField(max_length=50)
+	    tanggal_penetapan = models.DateField()
+	    tanggal_pengundangan = models.DateField()
+	    teu_badan = models.CharField(max_length=255)
+	    sumber = models.CharField(max_length=255)
+	    tempat_terbit = models.CharField(max_length=255)
+	    bidang_hukum = models.CharField(max_length=255)
+	    subjek = models.CharField(max_length=255)
+	    bahasa = models.CharField(max_length=50)
+	    lokasi = models.CharField(max_length=255)
+	    urusan_pemerintahan = models.CharField(max_length=255)
+	    status_produk = models.CharField(max_length=50)
+	    keterangan_status = models.TextField()
+	    penandatangan = models.CharField(max_length=255)
+	    pemrakarsa = models.CharField(max_length=255)
+	    peraturan_terkait = ArrayField(
+	        models.CharField(max_length=255),
+	        blank=True,
+	        null=True
+	    )
+	    dokumen_terkait = models.TextField(blank=True, null=True)
+	    created_at = models.DateTimeField(default=timezone.now)
+	    updated_at = models.DateTimeField(auto_now=True)
+	
+	    def __str__(self):
+	        return f"{self.jenis_peraturan} {self.nomor} Tahun {self.tahun_terbit}"
+	
+	class PeraturanVersion(models.Model):
+	    peraturan = models.ForeignKey(Peraturan, related_name='versions', on_delete=models.CASCADE)
+	    version_number = models.PositiveIntegerField()
+	    is_final = models.BooleanField(default=False)
+	    pdf_file = models.FileField(upload_to='peraturan_pdfs/')
+	    extracted_content = models.JSONField()
+	    changed_fields = models.JSONField(blank=True, null=True)
+	    created_at = models.DateTimeField(default=timezone.now)
+	    updated_at = models.DateTimeField(auto_now=True)
+	    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+	
+	    class Meta:
+	        unique_together = ('peraturan', 'version_number')
+	        ordering = ['version_number']
+	
+	    def __str__(self):
+	        return f"{self.peraturan} - Versi {self.version_number}"
+	
+	    def save(self, *args, **kwargs):
+	        # Ekstraksi PDF
+	        if self.pdf_file:
+	            self.pdf_file.seek(0)
+	            extracted_text = extract_pdf_content(self.pdf_file)
+	            self.extracted_content = {'text': extracted_text}
+	        
+	        # Memanggil save terlebih dahulu untuk mendapatkan versi yang benar
+	        super().save(*args, **kwargs)
+	
+	        # Pelacakan perubahan setelah save untuk mendapatkan data yang tersimpan
+	        if self.version_number > 1:
+	            previous_version = PeraturanVersion.objects.filter(peraturan=self.peraturan, version_number=self.version_number - 1).first()
+	            if previous_version:
+	                changed_fields = {}
+	                # Bandingkan field data Peraturan
+	                peraturan_fields = [field.name for field in Peraturan._meta.fields if field.name not in ('id', 'created_at', 'updated_at')]
+	                for field in peraturan_fields:
+	                    old_value = getattr(previous_version.peraturan, field)
+	                    new_value = getattr(self.peraturan, field)
+	                    if old_value != new_value:
+	                        changed_fields[field] = {'old': old_value, 'new': new_value}
+	                
+	                # Bandingkan isi PDF
+	                old_text = previous_version.extracted_content.get('text', '')
+	                new_text = self.extracted_content.get('text', '')
+	                if old_text != new_text:
+	                    changed_fields['extracted_content'] = 'Content changed.'
+	                
+	                self.changed_fields = changed_fields
+	                # Memperbarui instance dengan perubahan yang dicatat
+	                super().save(update_fields=['changed_fields'])
+""" End code [models.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/serializers.py]:
+""" Start isi code [serializers.py] """
+
+	# peraturan/serializers.py
+	
+	from rest_framework import serializers
+	from django.utils import timezone
+	from .models import Peraturan, PeraturanVersion
+	
+	class PeraturanVersionSerializer(serializers.ModelSerializer):
+	    class Meta:
+	        model = PeraturanVersion
+	        fields = ['id', 'version_number', 'is_final', 'pdf_file', 'extracted_content', 'changed_fields', 'created_at', 'updated_at', 'updated_by']
+	        read_only_fields = ['id', 'version_number', 'extracted_content', 'changed_fields', 'created_at', 'updated_at', 'updated_by']
+	
+	    def validate_peraturan_terkait(self, value):
+	        if value:
+	            if not isinstance(value, list):
+	                raise serializers.ValidationError("Peraturan terkait harus berupa daftar.")
+	            for item in value:
+	                if not isinstance(item, str):
+	                    raise serializers.ValidationError("Setiap peraturan terkait harus berupa string.")
+	        return value
+	    
+	class PeraturanSerializer(serializers.ModelSerializer):
+	    versions = PeraturanVersionSerializer(many=True, read_only=True)
+	    
+	    class Meta:
+	        model = Peraturan
+	        fields = [
+	            'id',
+	            'jenis_peraturan',
+	            'judul_peraturan',
+	            'tahun_terbit',
+	            'nomor',
+	            'singkatan_jenis',
+	            'tanggal_penetapan',
+	            'tanggal_pengundangan',
+	            'teu_badan',
+	            'sumber',
+	            'tempat_terbit',
+	            'bidang_hukum',
+	            'subjek',
+	            'bahasa',
+	            'lokasi',
+	            'urusan_pemerintahan',
+	            'status_produk',
+	            'keterangan_status',
+	            'penandatangan',
+	            'pemrakarsa',
+	            'peraturan_terkait',
+	            'dokumen_terkait',
+	            'created_at',
+	            'updated_at',
+	            'versions'
+	        ]
+	        read_only_fields = ['id', 'created_at', 'updated_at', 'versions']
+	    
+	    # Field-level validation
+	    def validate_tahun_terbit(self, value):
+	        current_year = timezone.now().year
+	        if value > current_year:
+	            raise serializers.ValidationError("Tahun terbit tidak boleh di masa depan.")
+	        return value
+	    
+	    def validate_nomor(self, value):
+	        if not value.isdigit():
+	            raise serializers.ValidationError("Nomor peraturan harus berupa angka.")
+	        return value
+	    
+	    def validate_tanggal_penetapan(self, value):
+	        if value > timezone.now().date():
+	            raise serializers.ValidationError("Tanggal penetapan tidak boleh di masa depan.")
+	        return value
+	    
+	    def validate_tanggal_pengundangan(self, value):
+	        if value > timezone.now().date():
+	            raise serializers.ValidationError("Tanggal pengundangan tidak boleh di masa depan.")
+	        return value
+	    
+	    # Object-level validation
+	    def validate(self, data):
+	        tanggal_penetapan = data.get('tanggal_penetapan')
+	        tanggal_pengundangan = data.get('tanggal_pengundangan')
+	        
+	        if tanggal_pengundangan and tanggal_penetapan:
+	            if tanggal_pengundangan < tanggal_penetapan:
+	                raise serializers.ValidationError("Tanggal pengundangan tidak boleh sebelum tanggal penetapan.")
+	        
+	        return data
+
+""" End code [serializers.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/apps.py]:
+""" Start isi code [apps.py] """
+
+	from django.apps import AppConfig
+	
+	class PeraturanConfig(AppConfig):
+	    default_auto_field = 'django.db.models.BigAutoField'
+	    name = 'peraturan'
+
+""" End code [apps.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/authentication.py]:
+""" Start isi code [authentication.py] """
+
+	# peraturan/authentication.py
+	from rest_framework_simplejwt.authentication import JWTAuthentication
+	
+	class SessionJWTAuthentication(JWTAuthentication):
+	    def authenticate(self, request):
+	        token = request.session.get('jwt_token')
+	        if token is None:
+	            return None
+	        validated_token = self.get_validated_token(token)
+	        return self.get_user(validated_token), validated_token
+
+""" End code [authentication.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/urls.py]:
+""" Start isi code [urls.py] """
+
+	# peraturan/urls.py
+	
+	from django.urls import path, include
+	from rest_framework import routers
+	from .views import PeraturanViewSet, PeraturanVersionViewSet
+	
+	router = routers.DefaultRouter()
+	router.register(r'peraturan', PeraturanViewSet, basename='peraturan')
+	router.register(r'versions', PeraturanVersionViewSet, basename='peraturanversion')
+	
+	urlpatterns = [
+	    path('', include(router.urls)),
+	]
+
+""" End code [urls.py] """
+
+[/home/enigmap/aptika/jdih_history/peraturan/utils/utils.py]:
+""" Start isi code [utils.py] """
+
+	import PyPDF2
+	
+	def extract_pdf_content(pdf_file):
+	    reader = PyPDF2.PdfReader(pdf_file)
+	    content = ""
+	    for page in reader.pages:
+	        content += page.extract_text()
+	    return content
+""" End code [utils.py] """
+

@@ -1,5 +1,4 @@
-import os
-
+import datetime
 import os
 
 def extract_code_to_txt(base_directory, output_file, prompt, ignore_dirs=None, ignore_files=None):
@@ -52,21 +51,24 @@ if __name__ == "__main__":
     base_dir = '/home/enigmap/aptika/jdih_history/'
     
     # Ganti 'output.txt' dengan nama file output yang diinginkan
-    output_txt = '/home/enigmap/aptika/jdih_history//output.txt'
+    timestamp_now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    output_txt = f'/home/enigmap/aptika/jdih_history/temp/generate_project_structure/generate_project_structure_{timestamp_now}.txt'
     
     # Daftar direktori yang akan diabaikan
-    ignore_dirs = ['migrations', '.git', '__pycache__', 'node_modules', 'env', 'venv', 'peraturan_pdfs' '/home/enigmap/aptika/jdih_history/peraturan/migrations', '/home/enigmap/aptika/jdih_history/jdih_history/utils', '/home/enigmap/aptika/jdih_history/peraturan/migrations/']  # Tambahkan direktori lain sesuai kebutuhan
+    ignore_dirs = ['media','temp','migrations', '.git', '__pycache__', 'node_modules', 'env', 'venv', 'peraturan_pdfs' '/home/enigmap/aptika/jdih_history/peraturan/migrations', '/home/enigmap/aptika/jdih_history/jdih_history/utils', '/home/enigmap/aptika/jdih_history/peraturan/migrations/']  # Tambahkan direktori lain sesuai kebutuhan
     
     # Daftar file yang akan diabaikan
     ignore_files = ['output.txt','Makefile', 'README.md', 'LICENSE', 'manage.py', 'Makefile' 'output', 'generate_project_structure.py', '.gitignore',
                     'requirements.txt',
                     '.env',
                     'wsgi.py',
+                    'generate_secret_key.py',
                     'asgi.py',
+                    'settings.py',
                     '__init__.py',
                     'tests.py',
                     'app.py',
                     'admin.py']  # Tambahkan file lain sesuai kebutuhan
-    prompt = "Hallo Gaesadass"
+    prompt = "Struktur folder dan code saat ini"
     extract_code_to_txt(base_dir, output_txt, prompt, ignore_dirs, ignore_files)
     print(f"Semua kode telah diekstrak ke {output_txt}")
