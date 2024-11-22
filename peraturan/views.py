@@ -13,6 +13,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import viewsets
 
+from jdih_history.base_viewset import BaseViewSet
+from jdih_history.exception_handler import api_response
 from peraturan.pagination import PeraturanVersionPagination
 
 
@@ -21,7 +23,7 @@ from .utils.utils import extract_pdf_content
 from .models import Peraturan, PeraturanVersion
 from .serializers import PeraturanSerializer, PeraturanVersionSerializer
 
-class PeraturanViewSet(viewsets.ModelViewSet):
+class PeraturanViewSet(BaseViewSet):
     queryset = Peraturan.objects.all()
     serializer_class = PeraturanSerializer
     permission_classes = [IsAuthenticated]
@@ -124,7 +126,7 @@ class PeraturanViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
-class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
+class PeraturanVersionViewSet(BaseViewSet):
     queryset = PeraturanVersion.objects.all()
     serializer_class = PeraturanVersionSerializer
     permission_classes = [IsAuthenticated]
@@ -154,7 +156,7 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail":"id_peraturan harus berupa angka."}, status=status.HTTP_400_BAD_REQUEST)
         
         query = self.get_annotated_queryset(peraturan_id=int(peraturan_id))
-        return Response(list(query), status=status.HTTP_200_OK)
+        return api_response(success=True, message="List version pada satu dokument.", data=list(query), status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def list_versions(self, request, *args, **kwargs):
