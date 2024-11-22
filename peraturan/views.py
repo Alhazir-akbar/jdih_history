@@ -49,21 +49,71 @@ class PeraturanViewSet(viewsets.ModelViewSet):
         peraturan = self.get_object()
         serializer = PeraturanVersionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         with transaction.atomic():
             last_version = peraturan.versions.last()
             version_number = last_version.version_number + 1 if last_version else 1
             pdf_file = request.FILES.get('pdf_file')
+
             if not pdf_file:
-                raise exceptions.ValidationError({"detail": "Lampiran PDF diperlukan untuk menambahkan versi baru."})
-            peraturan_version = PeraturanVersion.objects.create(
-                peraturan=peraturan,
-                version_number=version_number,
-                pdf_file=pdf_file,
-                extracted_content=extract_pdf_content(pdf_file),
-                updated_by=request.user
-            )
-            # Logika perbandingan dan pencatatan perubahan bisa ditambahkan di sini
+                return Response({"detail": "Lampiran PDF diperlukan untuk menambahkan versi baru."}, 
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                peraturan_version = PeraturanVersion.objects.create(
+                    peraturan=peraturan,
+                    version_number=version_number,
+                    pdf_file=pdf_file,
+                    extracted_content=extract_pdf_content(pdf_file),
+                    updated_by=request.user
+                )
+            except Exception as e:
+                return Response({"detail": f"Error processing PDF: {str(e)}"}, 
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Logika perbandingan bisa ditambahkan di sini jika belum lengkap
         return Response(PeraturanVersionSerializer(peraturan_version).data, status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Override update method to automatically create a new version
+        when the main Peraturan data is updated.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        old_data = {field.name: getattr(instance, field.name) for field in instance._meta.fields}
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        
+        with transaction.atomic():
+            # Simpan data terbaru
+            self.perform_update(serializer)
+
+            # Bandingkan perubahan antara data lama dan baru
+            new_data = serializer.validated_data
+            changed_fields = {
+                field: {'old': old_data[field], 'new': new_data.get(field, old_data[field])}
+                for field in old_data.keys() if old_data[field] != new_data.get(field, old_data[field])
+            }
+
+            # Buat versi baru hanya jika ada perubahan
+            if changed_fields:
+                pdf_file = request.FILES.get('pdf_file')
+                if not pdf_file:
+                    return Response({"detail": "Lampiran PDF diperlukan untuk membuat versi baru."}, 
+                                    status=status.HTTP_400_BAD_REQUEST)
+                
+                PeraturanVersion.objects.create(
+                    peraturan=instance,
+                    version_number=instance.versions.count() + 1,
+                    pdf_file=pdf_file,
+                    extracted_content=extract_pdf_content(pdf_file),
+                    changed_fields=changed_fields,
+                    updated_by=request.user
+                )
+
+        return Response(serializer.data)
 
 class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PeraturanVersion.objects.all()

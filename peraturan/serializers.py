@@ -19,6 +19,11 @@ class PeraturanVersionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Setiap peraturan terkait harus berupa string.")
         return value
     
+    def validate_pdf_file(self, value):
+        if not value.name.endswith('.pdf'):
+            raise serializers.ValidationError("Lampiran harus berupa file PDF.")
+        return value
+    
 class PeraturanSerializer(serializers.ModelSerializer):
     versions = PeraturanVersionSerializer(many=True, read_only=True)
     
