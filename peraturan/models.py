@@ -1,5 +1,3 @@
-# peraturan/models.py
-
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -7,7 +5,6 @@ from django.contrib.postgres.fields import ArrayField
 
 # Utils import can be adjusted based on actual utility functions
 from .utils.utils import extract_pdf_content
-
 
 class Peraturan(models.Model):
     JENIS_PERATURAN_CHOICES = [
@@ -27,6 +24,7 @@ class Peraturan(models.Model):
         ('id', 'Indonesian'),
         ('en', 'English'),
     ]
+    
     judul_peraturan = models.TextField()
     tahun_terbit = models.PositiveIntegerField()
     nomor = models.CharField(max_length=50)
@@ -41,15 +39,14 @@ class Peraturan(models.Model):
     lokasi = models.CharField(max_length=255)
     urusan_pemerintahan = models.CharField(max_length=255)
 
-    bahasa = models.CharField(max_length=50, choices=BAHASA_CHOICES)
-    id_tracking = models.CharField(max_length=255)
-    status_produk = models.CharField(max_length=50)
-    status = models.CharField(max_length=50, choices=STATUS_PRODUK_CHOICES)
-    jenis_peraturan = models.CharField(max_length=255, choices=JENIS_PERATURAN_CHOICES)
-    
-    keterangan_status = models.TextField()
-    penandatangan = models.CharField(max_length=255)
-    pemrakarsa = models.CharField(max_length=255)
+    bahasa = models.CharField(max_length=2, choices=BAHASA_CHOICES)  # Adjusted max_length to 2 for language codes
+    id_tracking = models.CharField(max_length=255, unique=True)  # Ensure tracking ID is unique
+    status_produk = models.CharField(max_length=50, choices=STATUS_PRODUK_CHOICES)  # Added choices for status_produk
+    jenis_peraturan = models.CharField(max_length=50, choices=JENIS_PERATURAN_CHOICES)  # Adjusted max_length
+
+    keterangan_status = models.TextField(blank=True, null=True)  # Allow keterangan_status to be optional
+    penandatangan = models.CharField(max_length=255, blank=True, null=True)  # Allow penandatangan to be optional
+    pemrakarsa = models.CharField(max_length=255, blank=True, null=True)  # Allow pemrakarsa to be optional
     peraturan_terkait = ArrayField(models.CharField(max_length=255), blank=True, null=True)
     dokumen_terkait = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
@@ -57,7 +54,6 @@ class Peraturan(models.Model):
 
     def __str__(self):
         return f"{self.jenis_peraturan} {self.nomor} Tahun {self.tahun_terbit}"
-
 
 class PeraturanVersion(models.Model):
     peraturan = models.ForeignKey(Peraturan, related_name='versions', on_delete=models.CASCADE)
@@ -76,4 +72,3 @@ class PeraturanVersion(models.Model):
 
     def __str__(self):
         return f"{self.peraturan} - Versi {self.version_number}"
-
