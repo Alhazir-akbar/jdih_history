@@ -12,14 +12,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import viewsets
-
 from peraturan.pagination import PeraturanVersionPagination
-
-
-from .authentication import SessionJWTAuthentication
 from .utils.utils import extract_pdf_content
 from .models import Peraturan, PeraturanVersion
-from .serializers import PeraturanSerializer, PeraturanVersionSerializer
+from .serializers import PeraturanCreateSerializer, PeraturanListSerializer, PeraturanSerializer, PeraturanVersionSerializer
+from rest_framework import generics
+
+
 
 class PeraturanViewSet(viewsets.ModelViewSet):
     queryset = Peraturan.objects.all()
@@ -191,3 +190,16 @@ class PeraturanVersionViewSet(viewsets.ReadOnlyModelViewSet):
             "version2": PeraturanVersionSerializer(version2).data,
             "comparison": comparison
         }, status=status.HTTP_200_OK)
+
+class PeraturanListView(generics.ListAPIView):
+    queryset = Peraturan.objects.all()
+    serializer_class = PeraturanListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = PeraturanVersionPagination
+
+
+class PeraturanCreateView(generics.CreateAPIView):
+    queryset = Peraturan.objects.all()
+    serializer_class = PeraturanCreateSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = PeraturanVersionPagination

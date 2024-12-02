@@ -90,3 +90,17 @@ class PeraturanSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Tanggal pengundangan tidak boleh sebelum tanggal penetapan.")
         
         return data
+
+class PeraturanListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Peraturan
+        fields = ['id', 'jenis_peraturan', 'status_produk', 'created_at', 'updated_at']
+
+
+class PeraturanCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Peraturan
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    

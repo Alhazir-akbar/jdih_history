@@ -15,6 +15,10 @@ install:
 makemigrations:
 	$(DJANGO_MANAGE) makemigrations
 
+# Membuat flush
+flush:
+	$(DJANGO_MANAGE) flush
+
 # Menerapkan migrasi ke database
 migrate:
 	$(DJANGO_MANAGE) migrate
